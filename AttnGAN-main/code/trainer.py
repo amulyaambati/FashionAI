@@ -8,6 +8,7 @@ from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
 from PIL import Image
+from tqdm import tqdm
 
 from miscc.config import cfg
 from miscc.utils import mkdir_p
@@ -231,7 +232,7 @@ class condGANTrainer(object):
 
         gen_iterations = 0
         # gen_iterations = start_epoch * self.num_batches
-        for epoch in range(start_epoch, self.max_epoch):
+        for epoch in tqdm(range(start_epoch, self.max_epoch)):
             start_t = time.time()
 
             data_iter = iter(self.data_loader)

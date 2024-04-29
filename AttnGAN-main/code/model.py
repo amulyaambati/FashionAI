@@ -403,7 +403,6 @@ class GET_IMAGE_G(nn.Module):
 
     def forward(self, h_code):
         out_img = self.img(h_code)
-        print(out_img.size())
         return out_img
 
 

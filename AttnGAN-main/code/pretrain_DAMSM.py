@@ -7,6 +7,7 @@ from miscc.config import cfg, cfg_from_file
 
 from datasets import TextDataset
 from datasets import prepare_data
+from tqdm import tqdm
 
 from model import RNN_ENCODER, CNN_ENCODER
 
@@ -56,7 +57,7 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
     w_total_loss1 = 0
     count = (epoch + 1) * len(dataloader)
     start_time = time.time()
-    for step, data in enumerate(dataloader, 0):
+    for step, data in tqdm(enumerate(dataloader, 0)):
         # print('step', step)
         rnn_model.zero_grad()
         cnn_model.zero_grad()
@@ -290,7 +291,7 @@ if __name__ == "__main__":
     # At any point you can hit Ctrl + C to break out of training early.
     try:
         lr = cfg.TRAIN.ENCODER_LR
-        for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
+        for epoch in tqdm(range(start_epoch, cfg.TRAIN.MAX_EPOCH)):
             optimizer = optim.Adam(para, lr=lr, betas=(0.5, 0.999))
             epoch_start_time = time.time()
             count = train(dataloader, image_encoder, text_encoder,
@@ -314,6 +315,7 @@ if __name__ == "__main__":
                 torch.save(text_encoder.state_dict(),
                            '%s/text_encoder%d.pth' % (model_dir, epoch))
                 print('Save G/Ds models.')
+                print('Time taken to run epoch', time.time()-epoch_start_time)
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
