@@ -8,6 +8,7 @@ from miscc.config import cfg, cfg_from_file
 from datasets import TextDataset
 from datasets import prepare_data
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from model import RNN_ENCODER, CNN_ENCODER
 
@@ -18,6 +19,7 @@ import random
 import pprint
 import datetime
 import dateutil.tz
+import pandas as pd
 import argparse
 import numpy as np
 from PIL import Image
@@ -102,7 +104,6 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
         torch.nn.utils.clip_grad_norm(rnn_model.parameters(),
                                       cfg.TRAIN.RNN_GRAD_CLIP)
         optimizer.step()
-
         if step % UPDATE_INTERVAL == 0:
             count = epoch * len(dataloader) + step
 
@@ -112,12 +113,21 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
             # w_cur_loss0 = w_total_loss0[0] / UPDATE_INTERVAL
             # w_cur_loss1 = w_total_loss1[0] / UPDATE_INTERVAL
 
+            if step!=0:
+                s_cur_loss0 = s_total_loss0 / UPDATE_INTERVAL
+                s_cur_loss1 = s_total_loss1 / UPDATE_INTERVAL
 
-            s_cur_loss0 = s_total_loss0 / UPDATE_INTERVAL
-            s_cur_loss1 = s_total_loss1 / UPDATE_INTERVAL
+                w_cur_loss0 = w_total_loss0 / UPDATE_INTERVAL
+                w_cur_loss1 = w_total_loss1 / UPDATE_INTERVAL
+            else:
+                s_cur_loss0 = s_total_loss0 
+                s_cur_loss1 = s_total_loss1 
 
-            w_cur_loss0 = w_total_loss0 / UPDATE_INTERVAL
-            w_cur_loss1 = w_total_loss1 / UPDATE_INTERVAL
+                w_cur_loss0 = w_total_loss0 
+                w_cur_loss1 = w_total_loss1 
+
+            epoch_end_loss = list((s_cur_loss0+s_cur_loss1,w_cur_loss0+w_cur_loss1))
+
 
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
@@ -140,7 +150,7 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
                 im = Image.fromarray(img_set)
                 fullpath = '%s/attention_maps%d.png' % (image_dir, step)
                 im.save(fullpath)
-    return count
+    return count, epoch_end_loss
 
 
 def evaluate(dataloader, cnn_model, rnn_model, batch_size):
@@ -178,7 +188,7 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size):
     s_cur_loss = s_total_loss.item() / step
     w_cur_loss = w_total_loss.item() / step
 
-    return s_cur_loss, w_cur_loss
+    return list((s_cur_loss, w_cur_loss))
 
 
 def build_models():
@@ -291,31 +301,62 @@ if __name__ == "__main__":
     # At any point you can hit Ctrl + C to break out of training early.
     try:
         lr = cfg.TRAIN.ENCODER_LR
+        final_train_losses =[]
+        final_valid_losses =[]
         for epoch in tqdm(range(start_epoch, cfg.TRAIN.MAX_EPOCH)):
             optimizer = optim.Adam(para, lr=lr, betas=(0.5, 0.999))
             epoch_start_time = time.time()
-            count = train(dataloader, image_encoder, text_encoder,
+            count,train_losses = train(dataloader, image_encoder, text_encoder,
                           batch_size, labels, optimizer, epoch,
                           dataset.ixtoword, image_dir)
+            train_losses.append(epoch)
+            final_train_losses.append(train_losses)
             print('-' * 89)
             if len(dataloader_val) > 0:
-                s_loss, w_loss = evaluate(dataloader_val, image_encoder,
+                valid_losses = evaluate(dataloader_val, image_encoder,
                                           text_encoder, batch_size)
                 print('| end epoch {:3d} | valid loss '
                       '{:5.2f} {:5.2f} | lr {:.5f}|'
-                      .format(epoch, s_loss, w_loss, lr))
+                      .format(epoch, valid_losses[0], valid_losses[0], lr))
+            valid_losses.append(epoch)
+            final_valid_losses.append(valid_losses)
             print('-' * 89)
             if lr > cfg.TRAIN.ENCODER_LR/10.:
                 lr *= 0.98
 
             if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
-                epoch == cfg.TRAIN.MAX_EPOCH):
+                epoch == cfg.TRAIN.MAX_EPOCH-1):
                 torch.save(image_encoder.state_dict(),
                            '%s/image_encoder%d.pth' % (model_dir, epoch))
                 torch.save(text_encoder.state_dict(),
                            '%s/text_encoder%d.pth' % (model_dir, epoch))
+                
+                train_losses_df = pd.DataFrame(final_train_losses,columns=["s_loss_train","w_loss_train","epoch"])
+                valid_losses_df = pd.DataFrame(final_valid_losses,columns=["s_loss_validation","w_loss_validation","epoch"])
+                losses_df = train_losses_df.merge(valid_losses_df,on='epoch',how='inner')
+                plt.figure()
+                plt.plot(losses_df['epoch'], losses_df['s_loss_train'],label='train')
+                plt.plot(losses_df['epoch'], losses_df['s_loss_validation'],label='validation')
+                plt.xlabel("Epoch")
+                plt.ylabel("s_loss")
+                plt.title('variation of s_loss wrt epochs')
+                plt.legend() 
+                plt.savefig('%s/s_loss_curve%d.png' % (model_dir, epoch))
+
+                plt.figure()
+                plt.plot(losses_df['epoch'], losses_df['w_loss_train'],label='train')
+                plt.plot(losses_df['epoch'], losses_df['w_loss_validation'],label='validation')
+                plt.xlabel("Epoch")
+                plt.ylabel("w_loss")
+                plt.title('variation of w_loss wrt epochs')
+                plt.legend() 
+                plt.savefig('%s/w_loss_curve%d.png' % (model_dir, epoch))
+
                 print('Save G/Ds models.')
                 print('Time taken to run epoch', time.time()-epoch_start_time)
+            
+                
+
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')
