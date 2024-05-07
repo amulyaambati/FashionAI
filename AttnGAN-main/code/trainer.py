@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
+import pandas as pd
+import matplotlib.pyplot as plt
 
 from PIL import Image
 from tqdm import tqdm
@@ -231,12 +233,14 @@ class condGANTrainer(object):
             noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
 
         gen_iterations = 0
+        train_losses =[]
         # gen_iterations = start_epoch * self.num_batches
         for epoch in tqdm(range(start_epoch, self.max_epoch)):
             start_t = time.time()
 
             data_iter = iter(self.data_loader)
             step = 0
+            
             while step < self.num_batches:
                 # reset requires_grad to be trainable for all Ds
                 # self.set_requires_grad_value(netsD, True)
@@ -331,10 +335,22 @@ class condGANTrainer(object):
                   % (epoch, self.max_epoch, self.num_batches,
                      errD_total.item(), errG_total.item(),
                      end_t - start_t))
+            train_losses.append([epoch,errD_total.item(), errG_total.item()])
             
 
             if epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:  # and epoch != 0:
+                losses_df = pd.DataFrame(train_losses,columns=['epoch','err_D','err_G'])
                 self.save_model(netG, avg_param_G, netsD, epoch)
+                fig, ax1 = plt.subplots()
+                ax2 = ax1.twinx()
+                ax1.plot(losses_df['epoch'], losses_df['err_G'])
+                ax2.plot(losses_df['epoch'], losses_df['err_D'])
+                ax1.set_xlabel('Epoch')
+                ax1.set_ylabel('Generator loss', color='g')
+                ax2.set_ylabel('Discriminator', color='b')
+
+                plt.title('variation of GAN loss wrt epochs')
+                plt.savefig('%s/loss_curve%d.png' % (self.model_dir, epoch))
 
         self.save_model(netG, avg_param_G, netsD, self.max_epoch)
 
