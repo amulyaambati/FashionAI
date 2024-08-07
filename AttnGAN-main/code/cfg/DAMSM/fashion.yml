@@ -1,7 +1,7 @@
 CONFIG_NAME: 'DAMSM'
 
-DATASET_NAME: 'fashiongen'
-DATA_DIR: '../data/fashiongen'
+DATASET_NAME: 'fashion'
+DATA_DIR: '../data/fashion'
 GPU_ID: 0
 WORKERS: 1
 
@@ -13,7 +13,7 @@ TREE:
 
 TRAIN:
     FLAG: True
-    NET_E: ''  # '../DAMSMencoders/bird/text_encoder200.pth'
+    NET_E: ''  # Trained model path '../output/fashion_DAMSM_2024_04_27_11_07_03/Model/text_encoder70.pth'
     BATCH_SIZE: 16
     MAX_EPOCH: 80
     SNAPSHOT_INTERVAL: 2
